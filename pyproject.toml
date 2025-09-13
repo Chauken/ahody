@@ -1,5 +1,5 @@
 [project]
-name = "articler"
+name = "ahody"
 version = "0.1.0"
 description = "Article Scraper"
 authors = [
@@ -20,7 +20,8 @@ dependencies = [
     "playwright (>=1.51.0,<2.0.0)",
     "rich (>=13.9.4,<14.0.0)",
     "pydantic-ai (>=0.0.46,<0.1.0)",
-    "click (>=8.1.8,<9.0.0)"
+    "click (>=8.1.8,<9.0.0)",
+    "gunicorn (>=23.0.0,<24.0.0)"
 ]
 
 [tool.poetry.group.dev.dependencies]
