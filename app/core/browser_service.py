@@ -1,3 +1,8 @@
+"""
+Browser Service for managing Playwright browser instances with authentication.
+Handles automated login, state management, and authenticated browsing.
+"""
+
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -146,6 +151,46 @@ class BrowserService:
             )
             return False
 
+    async def _browse_without_auth(self, url: str) -> Tuple[Playwright, Browser, BrowserContext, Page]:
+        """
+        Browse a URL without authentication.
+
+        Args:
+            url: The URL to browse
+
+        Returns:
+            Tuple of (playwright, browser, context, page) if successful, (None, None, None, None) otherwise
+        """
+        try:
+            # Start Playwright
+            logger.info(f"Starting browser session for {url} without authentication")
+            playwright = await async_playwright().start()
+
+            # Launch browser
+            browser = await playwright.chromium.launch(headless=self.headless)
+
+            # Create context with reasonable viewport
+            context = await browser.new_context(viewport={"width": 1280, "height": 800})
+
+            # Create page and navigate to site
+            page = await context.new_page()
+            logger.info(f"Navigating to {url}")
+
+            # Navigate to the URL
+            await page.goto(url, timeout=self.timeout)
+            logger.info("Successfully loaded page without authentication state")
+
+            # Take screenshot as verification
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            screenshot_path = self.screenshot_dir / f"no_auth_screenshot_{timestamp}.png"
+            await page.screenshot(path=str(screenshot_path))
+            logger.info(f"Saved screenshot to {screenshot_path}")
+
+            return playwright, browser, context, page
+
+        except Exception as e:
+            raise Exception(f"Error browsing {url}: {str(e)}")
+
     async def browse_url(
         self, url: str, force_login: bool = False
     ) -> Tuple[Playwright, Browser, BrowserContext, Page]:
@@ -168,12 +213,29 @@ class BrowserService:
             # Request login if needed
             login_success = await self._request_login(url, site_name)
             if not login_success:
-                raise Exception(f"Failed to authenticate for {site_name}")
+                # Check if we have login config for this site
+                ntm_sites = ["nt", "nsd", "kuriren", "norran", "corren"]
+                use_ntm_service = site_name.lower() in ntm_sites
+                use_nwt_service = site_name.lower() == "nwt"
+                
+                has_login_config = (
+                    use_ntm_service and self.ntm_login_service.has_login_config(site_name)
+                ) or (use_nwt_service and self.nwt_login_service.has_login_config(site_name))
+                
+                if has_login_config:
+                    # We have config but login failed - this is an error
+                    raise Exception(f"Failed to authenticate for {site_name}")
+                else:
+                    # No login config - proceed without authentication
+                    logger.info(f"No login configuration for {site_name}, proceeding without authentication")
+                    return await self._browse_without_auth(url)
 
         # Load the auth state
         state_path = self.state_service.load_storage_state(site_name)
         if not state_path:
-            raise Exception(f"Failed to load authentication state for {site_name}")
+            # Fallback to no auth if state loading fails
+            logger.warning(f"Failed to load authentication state for {site_name}, proceeding without authentication")
+            return await self._browse_without_auth(url)
 
         try:
             # Start Playwright
