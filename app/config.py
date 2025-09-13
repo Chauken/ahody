@@ -1,7 +1,11 @@
 from typing import Literal
+import os
+from dotenv import load_dotenv
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Explicitly load .env file for deployment environments like Render
+load_dotenv()
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -35,3 +39,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore
+
+# Debug logging for deployment troubleshooting
+if settings.ENVIRONMENT == "production":
+    print(f"OPENAI_API_KEY loaded: {'✓' if settings.OPENAI_API_KEY else '✗'}")
+    if settings.OPENAI_API_KEY:
+        print(f"API Key starts with: {settings.OPENAI_API_KEY[:10]}...")
