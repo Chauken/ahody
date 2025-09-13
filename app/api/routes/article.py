@@ -14,7 +14,6 @@ class ScrapeArticleRequest(BaseModel):
 class ScrapeArticleResponse(BaseModel):
     title: str
     url: str
-    html_content: str
     text_content: str
     date: str | None = None
     author: str | None = None
@@ -38,7 +37,6 @@ async def scrape_article(
         return ScrapeArticleResponse(
             title=article.title,
             url=article.url,
-            html_content=article.html_content,
             text_content=article.text_content,
             date=article.date,
             author=article.author,
