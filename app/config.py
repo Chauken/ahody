@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     EXPRESSEN_PASSWORD: str = ""
 
     WEB_SCRAPING_MODEL: str = "gpt-4.1-mini"
-    OPENAI_API_KEY: str = ""
+    OPENAI_API_KEY: str = "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"
 
     ENVIRONMENT: Literal["development", "production"] = "development"
 

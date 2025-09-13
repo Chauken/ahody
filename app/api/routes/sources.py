@@ -19,7 +19,6 @@ class SourceType(str, Enum):
 
 class SourceRequest(BaseModel):
     userPrompt: str
-    url: str
 
 
 class SourceResponse(BaseModel):
@@ -36,9 +35,15 @@ source_agent = Agent(
     system_prompt="""You are an AI assistant that helps configure news source scraping schedules.
     
     Your task is to:
-    1. Extract or generate a meaningful title for the news source
-    2. Generate an appropriate cron expression based on the user's timing requirements
-    3. Determine if the source is a URL (regular website) or RSS (RSS/XML feed)
+    1. Extract the URL from the user prompt
+    2. Extract or generate a meaningful title for the news source
+    3. Generate an appropriate cron expression based on the user's timing requirements
+    4. Determine if the source is a URL (regular website) or RSS (RSS/XML feed)
+    
+    URL extraction rules:
+    - Look for URLs in the user prompt (http://, https://, or domain names like aftonbladet.se)
+    - If no protocol specified, assume https://
+    - Extract the complete URL from the prompt
     
     Source type detection rules:
     - If URL contains "rss", "feed", "xml" or ends with .rss, .xml: type = "RSS"
@@ -58,26 +63,24 @@ source_agent = Agent(
     Always return a valid SourceResponse with:
     - title: A descriptive title for the source
     - cronjob_expression: A valid cron expression matching the requested time
-    - url: The provided URL (use exactly as given)
+    - url: The extracted URL (add https:// if missing protocol)
     - type: Either "URL" or "RSS" based on the URL analysis
     """,
 )
 
 
 class SourceAIService:
-    async def generate_source_config(self, user_prompt: str, url: str) -> SourceResponse:
+    async def generate_source_config(self, user_prompt: str) -> SourceResponse:
         """
-        Generate source configuration using Pydantic AI based on user prompt and URL.
+        Generate source configuration using Pydantic AI based on user prompt.
         """
         user_message = f"""
         User prompt: "{user_prompt}"
-        URL: "{url}"
         
         Please generate the source configuration.
         """
         
-        logger.info(f"Starting AI generation for URL: {url}")
-        logger.info(f"User prompt: {user_prompt}")
+        logger.info(f"Starting AI generation for prompt: {user_prompt}")
         logger.info(f"Using model: {settings.WEB_SCRAPING_MODEL}")
         
         try:
@@ -88,12 +91,8 @@ class SourceAIService:
             logger.info(f"Result data type: {type(result.data)}")
             logger.info(f"Result data: {result.data}")
             
-            # Ensure the URL matches the input
-            response = result.data
-            response.url = url
-            
-            logger.info(f"Final response: {response}")
-            return response
+            logger.info(f"Final response: {result.data}")
+            return result.data
             
         except Exception as e:
             logger.error(f"AI agent failed with error: {str(e)}")
@@ -102,9 +101,9 @@ class SourceAIService:
             
             # Fallback to default values if AI fails
             fallback_response = SourceResponse(
-                title=f"News Source - {url}",
+                title=f"News Source - {user_prompt}",
                 cronjob_expression="0 9 * * *",  # Default: daily at 9 AM
-                url=url,
+                url=user_prompt,  # Default to user prompt as URL
                 type=SourceType.URL  # Default to URL type
             )
             logger.warning(f"Using fallback response: {fallback_response}")
@@ -124,20 +123,14 @@ async def add_source(
     Add a new news source with AI-generated configuration.
     
     The AI will analyze the user prompt to:
+    - Extract the URL from the prompt
     - Generate an appropriate title for the source
     - Create a cron expression based on timing requirements in the prompt
     - Default to daily 9 AM scraping if no specific timing is mentioned
     """
-    if not request.url.startswith("http"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Invalid URL - must start with http or https"
-        )
-    
     try:
         source_config = await ai_service.generate_source_config(
-            request.userPrompt, 
-            request.url
+            request.userPrompt
         )
         return source_config
         
